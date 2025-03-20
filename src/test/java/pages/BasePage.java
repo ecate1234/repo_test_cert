@@ -1,187 +1,161 @@
 package pages;
 
 import java.awt.AWTException;
-import java.awt.GraphicsEnvironment;
-// Importaciones necesarias
+import java.awt.GraphicsEnvironment;  
 import java.awt.Robot;
 import java.awt.event.KeyEvent;
 import java.time.Duration;
-import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.Select;
-import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ui.*;
 
 import io.github.bonigarcia.wdm.WebDriverManager;
 
-
-import org.openqa.selenium.remote.RemoteWebDriver;
-
-
-import java.io.File;
-import java.io.IOException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
-import java.util.Properties;
-
-
 public class BasePage {
-    /*
-     * Declaración de una variable estática 'driver' de tipo WebDriver
-     * Esta variable va a ser compartida por todas las instancias de BasePage y sus subclases
-     */
+
     protected static WebDriver driver;
+    protected WebDriverWait wait;
     private static Properties properties = new Properties();
-    
-    /*
-     * Declaración de una variable de instancia 'wait' de tipo WebDriverWait.
-     * Se inicializa inmediatamente con una instancia dew WebDriverWait utilizando el 'driver' estático
-     * WebDriverWait se usa para poner esperas explícitas en los elementos web
-     */
-    WebDriverWait wait;
- 
-    /* 
-     * Configura el WebDriver para Chrome usando WebDriverManager.
-     * WebDriverManager va a estar descargando y configurando automáticamente el driver del navegador
-    */
+
+    // Indica cuántas flechas “DOWN” (p.ej. 1 para ir al 2º certificado)
+    private static final int CERTIFICADO_POSICION = 2; 
+
+    private static String originalWindowHandle;
+
     static {
-    WebDriverManager.chromedriver().setup();
-    //Inicializa la variable estática 'driver' con una instancia de ChromeDriver
-    // driver = new ChromeDriver();
-       // WebDriverManager.chromedriver().browserVersion("133.0.6943.143").setup();
-        
+        System.out.println("¿Entorno headless? " + GraphicsEnvironment.isHeadless());
+
+        WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--ignore-certificate-errors");
         options.addArguments("--start-maximized");
-        options.addArguments("--disable-popup-blocking"); // Evita ventanas emergentes
-        options.addArguments("--disable-extensions"); // Evita bloqueos por extensiones
-        options.addArguments("--remote-allow-origins=*"); // Evita bloqueos de origen cruzado
-        options.addArguments("--incognito"); // Para evitar almacenamiento de sesión
-        options.addArguments("--no-sandbox-and-elevated"); 
-        options.addArguments("--disable-dev-shm-usage"); 
-        options.addArguments("--deny-permission-prompts"); 
-        options.addArguments("--lang=es"); 
-        options.addArguments("--disable-gpu");
-        options.addArguments("--allow-running-insecure-content");  
-
+        options.addArguments("--disable-popup-blocking");
+        options.addArguments("--disable-extensions");
+        options.addArguments("--remote-allow-origins=*");
+        options.addArguments("--incognito");
+        options.addArguments("--no-sandbox");
+        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--lang=es");
 
         driver = new ChromeDriver(options);
+
+        originalWindowHandle = driver.getWindowHandle();
+        System.out.println("Handle original = " + originalWindowHandle);
     }
- 
-    /*
-     * Este es el constructor de BasePage que acepta un objeto WebDriver como argumento.
-     */
-    public BasePage(WebDriver driver) {
-        BasePage.driver = driver;
-        wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+
+    public BasePage() {
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(20));
     }
- 
-    //Método estático para navegar a una URL.
+
     public static void navigateTo(String url) {
+        System.out.println("Navegando a URL: " + url);
         driver.get(url);
     }
 
-    //Limpia la instancia del driver
-    public static void closeBrowser(){
-        if(driver!= null){
-            driver.quit();
-        }
-       
-    }
     public static WebDriver getDriver() {
         return driver;
     }
-        // Encuentra y devuelve un WebElement en la página utilizando un locator XPath, esperando a que esté presentente en el DOM
-    private WebElement Find(String locator){
 
+    public static void closeBrowser() {
+        if (driver != null) {
+            driver.quit();
+        }
+    }
+
+    private WebElement find(String locator) {
         return wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath(locator)));
     }
- 
-    public void clickElement(String locator){
-        Find(locator).click();
+
+    public void clickElement(String locator) {
+        find(locator).click();
     }
 
-    public void write(String locator, String keysToSend){
-        Find(locator).clear();
-        Find(locator).sendKeys(keysToSend);
-    }
-
-    public void selectFromDropdownByValue(String locator, String value){
-
-        Select dropdown = new Select(Find(locator)); 
-        dropdown.selectByValue(value);
-    }
-
-    public void selectFromDropdownByIndex(String locator, Integer index){
-
-        Select dropdown = new Select(Find(locator)); 
-        dropdown.selectByIndex(index);
-    }
-
-    public int dropdownSize(String locator){
-
-        Select dropdown=new Select(Find(locator));
-        
-        List<WebElement> dropdownOptions = dropdown.getOptions();
-
-        return dropdownOptions.size();
-
-    }
-//Metodo que lee la propiedad PosicionCertificado, de cara a saber en que posicion del popUp de certificados se encuentra el certificado que se ha de utilizar
-public static int getCertificatePosition(){
-    return Integer.parseInt(properties.getProperty("PosicionCertificado"))-1;
-}
-    // Método para seleccionar el certificado digital y confirmar acceso
+    /**
+     * Automatiza la selección de certificado:
+     * - Flecha DOWN (CERTIFICADO_POSICION - 1) veces
+     * - 1er TAB -> "Certificate information"
+     * - 2do TAB -> Botón "OK"
+     * - ENTER -> Confirmar
+     */
     public void seleccionarCertificadoDigital() {
-
         try {
-            System.out.println("Intentando crear Robot...");
             Robot robot = new Robot();
-            System.out.println("Robot creado exitosamente.");
-            robot.delay(2000);
-            robot.keyPress(KeyEvent.VK_DOWN);
-            robot.keyRelease(KeyEvent.VK_DOWN);
-            System.out.println("tecla down");
-            robot.delay(500); // Pequeña espera entre movimientos
+            System.out.println(">> Esperando ventana nativa para certificado...");
+            robot.delay(3000); // Da tiempo a que aparezca
 
-            robot.keyPress(KeyEvent.VK_DOWN);
-            robot.keyRelease(KeyEvent.VK_DOWN);
-            System.out.println("tecla down");
-            robot.delay(500); // Pequeña espera entre movimientos
+            traerVentanaAlFrente();
+            robot.delay(1500);
 
-        //seleccionamos el certificado
-        robot.keyPress(KeyEvent.VK_TAB);
-        robot.keyRelease(KeyEvent.VK_TAB);
-        System.out.println("tecla TAB");
-        robot.delay(1000); //Esperar a que se procese
+            int downPress = CERTIFICADO_POSICION - 1;  
+            System.out.println(">> Pulsando DOWN " + downPress + " veces");
+            for (int i = 0; i < downPress; i++) {
+                robot.keyPress(KeyEvent.VK_DOWN);
+                robot.keyRelease(KeyEvent.VK_DOWN);
+                robot.delay(500);
+            }
 
-        robot.keyPress(KeyEvent.VK_TAB);
-        robot.keyRelease(KeyEvent.VK_TAB);
-        System.out.println("tecla TAB");
-        robot.delay(1000); //Esperar a que se procese
-        robot.keyPress(KeyEvent.VK_ENTER);
-        robot.keyRelease(KeyEvent.VK_ENTER);
+            // 1er TAB -> "Certificate information"
+            robot.keyPress(KeyEvent.VK_TAB);
+            robot.keyRelease(KeyEvent.VK_TAB);
+            robot.delay(500);
 
-        robot.delay(1000);
+            // 2do TAB -> Botón "OK"
+            robot.keyPress(KeyEvent.VK_TAB);
+            robot.keyRelease(KeyEvent.VK_TAB);
+            robot.delay(500);
+
+            // Enter para confirmar
+            robot.keyPress(KeyEvent.VK_ENTER);
+            robot.keyRelease(KeyEvent.VK_ENTER);
+
+            robot.delay(1000);
+            System.out.println(">> Certificado seleccionado con Robot. Revisamos ventanas...");
+
+            switchToLastWindow();
+
         } catch (AWTException e) {
-            System.out.println("Error al crear Robot: " + e.getMessage());
             e.printStackTrace();
-        } catch (SecurityException e) {
-            System.out.println("Permiso denegado: " + e.getMessage());
+            System.err.println("Error Robot: " + e.getMessage());
+        }
+    }
+
+    private void traerVentanaAlFrente() {
+        try {
+            Robot robot = new Robot();
+            robot.keyPress(KeyEvent.VK_ALT);
+            robot.keyPress(KeyEvent.VK_TAB);
+            robot.keyRelease(KeyEvent.VK_TAB);
+            robot.keyRelease(KeyEvent.VK_ALT);
+        } catch (AWTException e) {
             e.printStackTrace();
         }
-      
-
-
-  
     }
 
+    private void switchToLastWindow() {
+        try {
+            Set<String> allHandles = driver.getWindowHandles();
+            System.out.println("Handles actuales: " + allHandles);
+            if (allHandles.size() == 1) {
+                for (String h : allHandles) {
+                    driver.switchTo().window(h);
+                }
+                return;
+            }
+            String lastHandle = "";
+            for (String h : allHandles) {
+                lastHandle = h;
+            }
+            driver.switchTo().window(lastHandle);
+            System.out.println("Cambiado a handle: " + lastHandle);
+
+        } catch (Exception e) {
+            System.err.println("Error cambiando ventana: " + e.getMessage());
+        }
+    }
 }
