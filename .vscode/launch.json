@@ -1,13 +1,18 @@
 {
     "version": "0.2.0",
     "configurations": [
-        
-        {
-            "type": "java",
-            "name": "Debug Gradle Test (JUnit/TestNG)",
-            "request": "attach",
-            "hostName": "localhost",
-            "port": 5005
-        }
+      {
+        // El nombre que aparecerá en VS Code
+        "name": "Attach to Gradle Test on 5005",
+        // Tipo de configuración para Java
+        "type": "java",
+        // Modo "attach" para conectarse a una JVM ya levantada con --debug-jvm
+        "request": "attach",
+        // Host donde corre la JVM (normalmente localhost)
+        "hostName": "localhost",
+        // Puerto donde está esperando
+        "port": 5005
+      }
     ]
-}
+  }
+  
